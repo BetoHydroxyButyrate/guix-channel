@@ -1,0 +1,26 @@
+# System-wide Alacritty defaults (beto-appvm-defaults).
+# A user's own ~/.config/alacritty/alacritty.toml takes precedence.
+
+[colors.primary]
+background = "#000000"
+foreground = "#44bc44"
+
+[font]
+size = 14.0
+
+[selection]
+save_to_clipboard = true
+
+[window.dimensions]
+columns = 128
+lines = 40
+
+[[keyboard.bindings]]
+key = "L"
+mods = "Control"
+chars = "\u001bc\u000c"
+
+[[keyboard.bindings]]
+key = "N"
+mods = "Control|Shift"
+action = "SpawnNewInstance"

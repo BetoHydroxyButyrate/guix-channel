@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# yadm-bootstrap — first-run dotfiles setup for a fresh AppVM.
+#
+# Creates ~/proj, then clones the yadm dotfiles repo.  Safe to re-run:
+# if a yadm repo is already present it just reports status and exits.
+#
+# Environment overrides:
+#   YADM_DOTFILES_URL   repo to clone (default below)
+#   PROJ_DIR            working directory to create (default ~/proj)
+#   GIT_SSH_COMMAND     ssh command for git (default accepts new host keys)
+
+set -euo pipefail
+
+url="${YADM_DOTFILES_URL:-git@gitea.zepherin.com:permezel/yadm-dotfiles.git}"
+proj="${PROJ_DIR:-$HOME/proj}"
+repo="${XDG_DATA_HOME:-$HOME/.local/share}/yadm/repo.git"
+force=0
+yadm_args=()
+
+usage() {
+    cat <<EOF
+Usage: yadm-bootstrap [-f|--force] [-u|--url URL] [--bootstrap|--no-bootstrap]
+
+  -f, --force       after cloning, overwrite local files that differ from
+                    the repo (e.g. config seeded by the template)
+  -u, --url URL     clone URL instead of $url
+  --bootstrap       run the repo's yadm bootstrap without asking
+  --no-bootstrap    never run the repo's yadm bootstrap
+EOF
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -f|--force)                 force=1 ;;
+        -u|--url)                   url="${2:?--url needs an argument}"; shift ;;
+        --bootstrap|--no-bootstrap) yadm_args+=("$1") ;;
+        -h|--help)                  usage; exit 0 ;;
+        *) echo "yadm-bootstrap: unknown option: $1" >&2; usage >&2; exit 2 ;;
+    esac
+    shift
+done
+
+mkdir -p "$proj"
+
+if [ -d "$repo" ]; then
+    echo "yadm repo already present at $repo — nothing to clone."
+    yadm status --short || true
+    exit 0
+fi
+
+# Cloning over ssh needs a key: either a local one or an agent
+# (e.g. split-ssh forwarding SSH_AUTH_SOCK from a vault qube).
+if [ -z "${SSH_AUTH_SOCK:-}" ] && ! ls "$HOME"/.ssh/id_* >/dev/null 2>&1; then
+    echo "yadm-bootstrap: warning: no SSH_AUTH_SOCK and no ~/.ssh/id_* key;" >&2
+    echo "                the clone of $url will probably fail." >&2
+fi
+
+export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o StrictHostKeyChecking=accept-new}"
+
+echo "Cloning $url ..."
+yadm clone "${yadm_args[@]}" "$url"
+
+# yadm leaves pre-existing local files alone when they differ from the
+# repo; list them, and overwrite them if asked.
+cd "$HOME"
+mapfile -t differ < <(yadm diff --name-only)
+if [ "${#differ[@]}" -gt 0 ]; then
+    if [ "$force" -eq 1 ]; then
+        echo "Overwriting local files with repo versions:"
+        printf '  %s\n' "${differ[@]}"
+        yadm checkout -- "${differ[@]}"
+    else
+        echo "These local files differ from the repo and were left as-is:"
+        printf '  %s\n' "${differ[@]}"
+        echo "Re-run with --force, or: yadm checkout -- <file>"
+    fi
+fi
+
+echo "Done.  Projects go in $proj."
